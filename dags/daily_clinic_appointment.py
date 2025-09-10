@@ -1,4 +1,3 @@
-import os
 import pendulum
 import pandas as pd
 import logging
@@ -9,18 +8,27 @@ from sqlalchemy import text
 from airflow.decorators import dag, task
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.providers.common.sql.operators.sql import SQLValueCheckOperator
-from airflow.exceptions import AirflowSkipException, AirflowFailException
+from airflow.exceptions import AirflowFailException
 from airflow.operators.empty import EmptyOperator
+from include.data_processing import (
+    find_source_file,
+    clean_appointment_data,
+    save_cleaned_data,
+)
+from include.validators import validate_csv_file
+from include.database import load_to_staging_table, cleanup_temp_file, load_fact_table
+from include.data_quality import get_dq_checks, run_dq_checks
 
 ## Logger
 logger = logging.getLogger("airflow.task")
 
-# --- DAG Configuration ---
-DB_CONN_ID = "postgres_default"  # The default connection ID for the backend DB
-DATA_PATH = "/opt/airflow/data"  # This is the path inside the container
+# DAG Configuration
+DB_CONN_ID = "postgres_default"
+DATA_PATH = "/opt/airflow/data"
 FACT_TABLE = "fct_daily_appointments"
 STG_TABLE = "stg_daily_appointments"
 EXPECTED_COLUMNS = ["appointment_id", "clinic_id", "patient_id", "created_at"]
+
 
 @contextmanager
 def get_db_connection(conn_id: str):
@@ -41,203 +49,163 @@ def get_db_connection(conn_id: str):
     # doc_md=__doc__,
     tags=["data-pipeline"],
     default_args={
-        "retries":  2,
-        "retry_delay": timedelta(minutes=5)
+        "retries": 2,
+        "retry_delay": timedelta(minutes=5),
         # "email_on_failure": True,
-    }
+    },
 )
-
 def daily_clinic_appointment_dag():
-    
     @task
-    def extract_file_for_processing(ds: str) -> str:
-        date_str = datetime.strptime(ds, '%Y-%m-%d').strftime("%Y_%m_%d")
-        filename = f"appointments_{date_str}.csv"
-        filepath = os.path.join(DATA_PATH, filename)
+    def extract_source_file(ds: str) -> str:
+        """Airflow task wrapper for file extraction"""
+        logger.info(f"Starting file extraction task for date: {ds}")
 
-        logger.info(f"Looking for file under path: {filepath}")
-
-        if not os.path.exists(filepath):
-            raise AirflowFailException(f"File: {filename} not found under path: {filepath}")
-
-        logger.info(f"Found file: {filename} under path: {filepath}")
-
-        return filepath
-
-
-    @task
-    def validate_file(filepath: str, ds: str) -> str:
-        logger.info("Reading CSV file...")
-        
         try:
-            df = pd.read_csv(filepath)
-            logger.info(f"Successfully read CSV with {len(df)} rows")
-        except pd.errors.ParserError as e:
-            raise AirflowFailException(f"Failed to parse CSV file. File may be corrupted: {e}")
+            date_str = datetime.strptime(ds, "%Y-%m-%d").strftime("%Y_%m_%d")
+            file_path = find_source_file(DATA_PATH, date_str)
+
+            logger.info(f"File extraction completed successfully: {file_path}")
+            return file_path
+
+        except FileNotFoundError as e:
+            logger.error(f"Source file not found for date {ds}: {e}")
+            raise AirflowFailException(f"Source file missing for {ds}: {e}")
+
+    @task
+    def validate_source_file(filepath: str, ds: str) -> str:
+        """Validate source file structure"""
+        logger.info(f"Starting validation for: {filepath}")
+
+        try:
+            validate_csv_file(filepath, EXPECTED_COLUMNS)
+            logger.info("File validation completed successfully")
+            return filepath
+
+        except (ValueError, pd.errors.ParserError) as e:
+            logger.error(f"Validation failed: {e}")
+            raise AirflowFailException(f"File validation failed: {e}")
+
         except Exception as e:
-            raise AirflowFailException(f"Error reading CSV file: {e}")
-
-        # Check if empty
-        if df.empty:
-            logger.error("CSV file contains no rows")
-            raise AirflowFailException("CSV file is empty")
-        
-        # Check required columns
-        missing_columns = set(EXPECTED_COLUMNS) - set(df.columns)
-        if missing_columns:
-            raise AirflowFailException(f"CSV missing required columns: {missing_columns}")
-        
-        # Log extra columns (non-blocking)
-        extra_columns = set(df.columns) - set(EXPECTED_COLUMNS)
-        if extra_columns:
-            logger.warning(f"CSV file contains extra columns: {extra_columns}")
-
-        return filepath
-
+            logger.error(f"Unexpected error: {e}")
+            raise AirflowFailException(f"Validation task failed: {e}")
 
     @task
-    def clean_data(filepath: str, ds: str) -> str:
-        df = pd.read_csv(filepath)
+    def clean_source_data(filepath: str, ds: str) -> str:
+        """Clean source data and save to temporary file"""
+        logger.info(f"Starting data cleaning for: {filepath}")
 
-        df['clinic_id'] = df['clinic_id'].str.lower().str.strip()
-        df['created_at'] = pd.to_datetime(df['created_at'], format="mixed", errors="coerce")
-        df.dropna(subset=['appointment_id', 'clinic_id'], inplace=True)
+        try:
+            cleaned_df = clean_appointment_data(filepath, EXPECTED_COLUMNS)
+            temp_file = save_cleaned_data(cleaned_df, DATA_PATH, ds)
 
-        temp_file = f"{DATA_PATH}/temp_validated_{ds}.parquet"
-        df.to_parquet(temp_file)
+            logger.info("Data cleaning completed successfully")
+            return temp_file
 
-        return temp_file
-
-        # duplicates
+        except Exception as e:
+            logger.error(f"Data cleaning failed: {e}")
+            raise AirflowFailException(f"Data cleaning failed: {e}")
 
     @task
-    def load_to_staging(temp_file: str, ds: str):
-        logger.info(f"Started loading {temp_file} to {STG_TABLE}")
+    def load_data_to_staging(temp_file: str, ds: str) -> int:
+        """Load data to staging table"""
+        logger.info(f"Starting staging load for: {temp_file}")
 
-        raw_df = pd.read_parquet(temp_file)
+        try:
+            with get_db_connection(DB_CONN_ID) as conn:
+                with conn.begin():
+                    row_count = load_to_staging_table(temp_file, STG_TABLE, conn, ds)
 
-        with get_db_connection(DB_CONN_ID) as conn:
-            logger.info("Connected to database...")
-            with conn.begin():
-                try:
-                    logger.info(f"Deleting existing record for date: {ds}")
-                    delete_result = conn.execute(
-                        text(f"""
-                             DELETE FROM {STG_TABLE}
-                             WHERE
-                                created_at = :ds
-                             """),
-                        {"ds": ds}
-                    )
-                    logger.info(f"Deleted {delete_result.rowcount} records")
-                    
-                    logger.info(f"Inserting new records...")
-                    raw_df.to_sql(
-                        STG_TABLE,
-                        conn,
-                        if_exists='append',
-                        index=False,
-                        method='multi'
-                    )
-                except Exception as e:
-                    raise AirflowFailException(f"Error during DB operation, transaction will be rolled back: {e}")
+            logger.info(f"Staging load completed successfully: {row_count} records")
+            return row_count
 
-        os.remove(temp_file)
+        except Exception as e:
+            logger.error(f"Staging load failed: {e}")
+            raise AirflowFailException(f"Staging load failed: {e}")
 
-        logger.info(f"Successfully loaded {len(raw_df)} record to {STG_TABLE}")
-        return len(raw_df)
+        finally:
+            cleanup_temp_file(temp_file)
 
     @task
     def staging_dq_checks(row_count: int, ds: str):
+        """Run data quality checks on staging table"""
+        logger.info(f"Starting DQ checks for date: {ds}")
 
-        dq_checks = [
-            {'name': 'row_count_check',
-             'sql': f'SELECT COUNT(*) FROM {STG_TABLE} WHERE created_at = :ds;',
-             'test':  lambda result: result == row_count,
-             'error': 'Staging table is empty.'},
+        try:
+            checks = get_dq_checks(STG_TABLE, row_count)
 
-            {'name': 'null_check',
-             'sql': f'SELECT COUNT(*) FROM {STG_TABLE} WHERE created_at = :ds AND (appointment_id IS NULL OR clinic_id IS NULL);',
-             'test':  lambda result: result == 0,
-             'error': 'Found NULL values in key columns.'},
+            with get_db_connection(DB_CONN_ID) as conn:
+                failed_checks = run_dq_checks(checks, conn, ds)
 
-            {'name': 'duplicate_check',
-             'sql': f'SELECT COUNT(*) FROM (SELECT 1 FROM {STG_TABLE} WHERE created_at = :ds GROUP BY appointment_id HAVING COUNT(*) > 1) d;',
-             'test':  lambda result: result == 0,
-             'error': 'Found duplicate appointment_ids.'},
-        ]
+            if failed_checks:
+                error_msg = f"DQ failures for {ds}:\n" + "\n".join(failed_checks)
+                logger.error(error_msg)
+                raise AirflowFailException(error_msg)
 
-        failed_dqs = []
-        with get_db_connection(DB_CONN_ID) as conn:
-            for dq in dq_checks:
-                name = dq['name']
-                sql = dq['sql']
+            logger.info(f"All DQ checks passed for date: {ds}")
 
-                result = conn.execute(text(sql), {'ds': ds}).scalar()
+        except Exception as e:
+            logger.error(f"DQ check execution failed: {e}")
+            raise AirflowFailException(f"DQ check failed: {e}")
 
-                if not dq['test'](result):
-                    error_message = f"DQ check failed: {name}, {dq['error']}, expected: {dq['test']}, got: {result}"
-                    logger.error(error_message)
-                    failed_dqs.append(error_message)
+    @task
+    def load_fact_table_from_staging(ds: str):
+        """Load fact table from staging data"""
+        logger.info(f"Starting fact table load for date: {ds}")
 
+        try:
+            with get_db_connection(DB_CONN_ID) as conn:
+                with conn.begin():
+                    row_count = load_fact_table(STG_TABLE, FACT_TABLE, conn, ds)
 
-        if failed_dqs:
-            raise AirflowFailException(f"DQ check for ds: {ds}:\n" + "\n".join(failed_dqs))
+            logger.info(f"Fact table load completed successfully: {row_count} records")
 
-        logger.info(f"DQ for ds: {ds} passed successfully")
+        except Exception as e:
+            logger.error(f"Fact table load failed: {e}")
+            raise AirflowFailException(f"Fact table load failed: {e}")
 
+    # aggregation check
+    # The sum of appointments_count in the fact table for a given day must equal
+    # the total number of valid rows in the staging table for that same day
+    reconciliation_check = SQLValueCheckOperator(
+        task_id="check_reconciliation",
+        conn_id="postgres_default",
+        sql="""
+            SELECT ABS(
+                COALESCE((
+                    SELECT SUM(appointments_count) 
+                    FROM {{ params.fact_table }}
+                    WHERE appointment_date = '{{ ds }}'
+                ), 0) -
+                COALESCE((
+                    SELECT COUNT(*) 
+                    FROM {{ params.stg_table }}
+                    WHERE DATE(created_at) = '{{ ds }}'
+                ), 0)
+            ) AS difference
+        """,
+        pass_value=0,
+        params={"fact_table": FACT_TABLE, "stg_table": STG_TABLE},
+    )
 
+    end_pipeline = EmptyOperator(task_id="end")
 
+    source_file = extract_source_file()
+    validated_file = validate_source_file(source_file)
+    cleaned_data = clean_source_data(validated_file)
+    staged_data = load_data_to_staging(cleaned_data)
+    dq_results = staging_dq_checks(staged_data)
+    fact_load = load_fact_table_from_staging()
 
-    a = extract_file_for_processing()
-    b = validate_file(a)
-    c = clean_data(b)
-    d = load_to_staging(c)
-    e = staging_dq_checks(d)
+    (
+        source_file
+        >> validated_file
+        >> cleaned_data
+        >> staged_data
+        >> dq_results
+        >> fact_load
+        >> reconciliation_check
+        >> end_pipeline
+    )
 
-    a >> b >> c >> d >> e
 
 daily_clinic_appointment = daily_clinic_appointment_dag()
-
-    
-
-
-
-
-
-#
-# @task
-# def dq_checks_staging(row_count: int, ds: str):
-#     logger.info(f"Running data quality checks on {STG_TABLE}")
-#
-#     with get_db_connection(DB_CONN_ID) as conn:
-#             logger.info(f"Performing row count validation for ds: {ds}")
-#             count_sql = f"""
-#                 SELECT
-#                     COUNT(*)
-#                 FROM {STG_TABLE}
-#                 WHERE
-#                     created_at = :ds
-#             """
-#             count = conn.execute(
-#                 text(f"""
-#                     SELECT
-#                         COUNT(*)
-#                     FROM {STG_TABLE}
-#                     WHERE
-#                         created_at = :ds
-#                     """),
-#                 {"ds": ds}
-#                 ).scalar()
-#
-#             if count != staging_rows:
-#                 logger.info(f"Row count mismatch - Expected: {staging_rows}, Found: {count} ")
-#                 raise AirflowFailException(f"Staging load failed: expected: {staging_rows}, got: {count}")
-#
-#
-#
-#
-#
-#
-#
-#
