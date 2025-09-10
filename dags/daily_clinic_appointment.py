@@ -57,7 +57,8 @@ def get_db_connection(conn_id: str):
 def daily_clinic_appointment_dag():
     @task
     def extract_source_file(ds: str) -> str:
-        """Airflow task wrapper for file extraction"""
+        # Assume that file is expected to land daily, naming convention won't change
+        """File extraction for yesterdays date"""
         logger.info(f"Starting file extraction task for date: {ds}")
 
         try:
@@ -73,6 +74,7 @@ def daily_clinic_appointment_dag():
 
     @task
     def validate_source_file(filepath: str, ds: str) -> str:
+        # Assume that CSV structure remains consistent
         """Validate source file structure"""
         logger.info(f"Starting validation for: {filepath}")
 
@@ -81,16 +83,16 @@ def daily_clinic_appointment_dag():
             logger.info("File validation completed successfully")
             return filepath
 
-        except (ValueError, pd.errors.ParserError) as e:
+        except ValueError as e:
             logger.error(f"Validation failed: {e}")
             raise AirflowFailException(f"File validation failed: {e}")
-
         except Exception as e:
             logger.error(f"Unexpected error: {e}")
             raise AirflowFailException(f"Validation task failed: {e}")
 
     @task
     def clean_source_data(filepath: str, ds: str) -> str:
+        # Assume that files are small enough to process in-memory with pandas
         """Clean source data and save to temporary file"""
         logger.info(f"Starting data cleaning for: {filepath}")
 
@@ -127,6 +129,7 @@ def daily_clinic_appointment_dag():
 
     @task
     def staging_dq_checks(row_count: int, ds: str):
+        # Assume zero tolerance for DQs, task fails
         """Run data quality checks on staging table"""
         logger.info(f"Starting DQ checks for date: {ds}")
 
