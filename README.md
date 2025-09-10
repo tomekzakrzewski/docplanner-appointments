@@ -71,9 +71,9 @@ loading cleaned data to `stg_daily_appointments` table
     - null values
     - duplicate appointment ID
 6. **Load to fact** - `load_fact_table_from_staging`, 
-aggregate data by clinic and date, load to final table fct_daily_appointments
+aggregate data by clinic and date, load to final table `fct_daily_appointments`
 7. **Reconciliation DQ check** - `reconciliation_check`,
-dq on final table, comparing sum of appointments from fact with sum of rows from staging. If passes, means aggregation was successfull.
+dq on final table, comparing sum of appointments from fact with sum of rows from staging. 
 
 **Tables schemas**
 ```
