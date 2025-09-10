@@ -53,6 +53,15 @@ docker-compose --profile test run --rm test
 ```
 
 ---
+
+### 6. Access PostgreSQL Database
+- Port: `5432` 
+- Host: `localhost` 
+- Database: `airflow`
+- Username: `airflow`
+- Password: `airflow`  
+
+---
 ## Pipeline Flow
 ```
 CSV -> Validate -> Clean -> Stage -> Quality Checks -> Agg Table -> Comparison DQ
