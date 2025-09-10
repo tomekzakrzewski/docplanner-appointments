@@ -55,7 +55,7 @@ docker-compose --profile test run --rm test
 ---
 ## Pipeline Flow
 ```
-CSV → Validate → Clean → Stage → Quality Checks → Agg Table
+CSV -> Validate -> Clean -> Stage -> Quality Checks -> Agg Table -> Comparison DQ
 ```
 
 ## Steps
