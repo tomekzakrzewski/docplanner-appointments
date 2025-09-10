@@ -109,6 +109,8 @@ def daily_clinic_appointment_dag():
 
     @task
     def load_data_to_staging(temp_file: str, ds: str) -> int:
+        # Assume assume that each CSV file (appointments_YYYY_MM_DD.csv) contains only
+        # records where the created_at date is the same the date in the filename
         """Load data to staging table"""
         logger.info(f"Starting staging load for: {temp_file}")
 

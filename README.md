@@ -1,5 +1,20 @@
 # Clinic Appointments Data Pipeline
 
+## Tech Stack
+- Apache Airflow
+- PostgreSQL
+- Docker & docker-compose
+- Python (pandas, SQLAlchemy)
+
+## ️Features
+- Error handlings
+- Logging
+- Data quality checks
+- Incremental processing
+- Orchestration
+- Unit test
+- Idempotency
+
 ## Quick Start
 ### 1. Clone the repository
 ```bash
