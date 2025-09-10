@@ -6,7 +6,7 @@
     );
 
 
-    CREATE TABLE IF NOT EXISTS fct_daily_appointments (
+    CREATE TABLE IF NOT EXISTS agg_daily_appointments (
         clinic_id VARCHAR(255) NOT NULL,
         appointment_date DATE NOT NULL,
         appointments_count INTEGER,

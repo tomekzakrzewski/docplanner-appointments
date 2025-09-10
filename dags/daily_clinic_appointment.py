@@ -16,7 +16,7 @@ from include.data_processing import (
     save_cleaned_data,
 )
 from include.validators import validate_csv_file
-from include.database import load_to_staging_table, cleanup_temp_file, load_fact_table
+from include.database import load_stg_table, cleanup_temp_file, load_agg_table
 from include.data_quality import get_dq_checks, run_dq_checks
 
 ## Logger
@@ -25,7 +25,7 @@ logger = logging.getLogger("airflow.task")
 # DAG Configuration
 DB_CONN_ID = "postgres_default"
 DATA_PATH = "/opt/airflow/data"
-FCT_TABLE = "fct_daily_appointments"
+AGG_TABLE = "agg_daily_appointments"
 STG_TABLE = "stg_daily_appointments"
 EXPECTED_COLUMNS = ["appointment_id", "clinic_id", "patient_id", "created_at"]
 
@@ -85,7 +85,9 @@ def daily_clinic_appointment_dag():
 
         except ValueError as e:
             logger.error(f"Validation failed: {e}")
-            raise AirflowFailException(f"File validation failed: {e}")
+            raise AirflowFailException(
+                f"File validation failed: {e}"
+            )  # could handle better, give more information
         except Exception as e:
             logger.error(f"Unexpected error: {e}")
             raise AirflowFailException(f"Validation task failed: {e}")
@@ -108,7 +110,7 @@ def daily_clinic_appointment_dag():
             raise AirflowFailException(f"Data cleaning failed: {e}")
 
     @task
-    def load_data_to_staging(temp_file: str, ds: str) -> int:
+    def load_stg_daily_appointments(temp_file: str, ds: str) -> int:
         # Assume assume that each CSV file (appointments_YYYY_MM_DD.csv) contains only
         # records where the created_at date is the same the date in the filename
         """Load data to staging table"""
@@ -117,7 +119,7 @@ def daily_clinic_appointment_dag():
         try:
             with get_db_connection(DB_CONN_ID) as conn:
                 with conn.begin():
-                    row_count = load_to_staging_table(temp_file, STG_TABLE, conn, ds)
+                    row_count = load_stg_table(temp_file, STG_TABLE, conn, ds)
 
             logger.info(f"Staging load completed successfully: {row_count} records")
             return row_count
@@ -130,7 +132,7 @@ def daily_clinic_appointment_dag():
             cleanup_temp_file(temp_file)
 
     @task
-    def staging_dq_checks(row_count: int, ds: str):
+    def dq_checks_staging(row_count: int, ds: str):
         # Assume zero tolerance for DQs, task fails
         """Run data quality checks on staging table"""
         logger.info(f"Starting DQ checks for date: {ds}")
@@ -153,14 +155,14 @@ def daily_clinic_appointment_dag():
             raise AirflowFailException(f"DQ check failed: {e}")
 
     @task
-    def load_fact_table_from_staging(ds: str):
-        """Load fact table from staging data"""
-        logger.info(f"Starting fact table load for date: {ds}")
+    def load_agg_daily_appointments(ds: str):
+        """Load agg table from staging data"""
+        logger.info(f"Starting agg table load for date: {ds}")
 
         try:
             with get_db_connection(DB_CONN_ID) as conn:
                 with conn.begin():
-                    row_count = load_fact_table(STG_TABLE, FCT_TABLE, conn, ds)
+                    row_count = load_agg_table(STG_TABLE, AGG_TABLE, conn, ds)
 
             logger.info(f"Fact table load completed successfully: {row_count} records")
 
@@ -169,16 +171,16 @@ def daily_clinic_appointment_dag():
             raise AirflowFailException(f"Fact table load failed: {e}")
 
     # aggregation check
-    # The sum of appointments_count in the fact table for a given day must equal
+    # The sum of appointments_count in the agg table for a given day must equal
     # the total number of valid rows in the staging table for that same day
-    reconciliation_check = SQLValueCheckOperator(
-        task_id="check_reconciliation",
+    dq_check_comparison = SQLValueCheckOperator(
+        task_id="check_comparison",
         conn_id="postgres_default",
         sql="""
             SELECT ABS(
                 COALESCE((
                     SELECT SUM(appointments_count) 
-                    FROM {{ params.fct_table }}
+                    FROM {{ params.agg_table }}
                     WHERE appointment_date = '{{ ds }}'
                 ), 0) -
                 COALESCE((
@@ -189,7 +191,7 @@ def daily_clinic_appointment_dag():
             ) AS difference
         """,
         pass_value=0,
-        params={"fct_table": FCT_TABLE, "stg_table": STG_TABLE},
+        params={"agg_table": AGG_TABLE, "stg_table": STG_TABLE},
     )
 
     end_pipeline = EmptyOperator(task_id="end")
@@ -197,9 +199,9 @@ def daily_clinic_appointment_dag():
     source_file = extract_source_file()
     validated_file = validate_source_file(source_file)
     cleaned_data = clean_source_data(validated_file)
-    staged_data = load_data_to_staging(cleaned_data)
-    dq_results = staging_dq_checks(staged_data)
-    fact_load = load_fact_table_from_staging()
+    staged_data = load_stg_daily_appointments(cleaned_data)
+    dq_results = dq_checks_staging(staged_data)
+    agg_load = load_agg_daily_appointments()
 
     (
         source_file
@@ -207,8 +209,8 @@ def daily_clinic_appointment_dag():
         >> cleaned_data
         >> staged_data
         >> dq_results
-        >> fact_load
-        >> reconciliation_check
+        >> agg_load
+        >> dq_check_comparison
         >> end_pipeline
     )
 

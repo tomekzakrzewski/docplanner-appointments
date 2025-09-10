@@ -6,7 +6,7 @@ from sqlalchemy import text
 logger = logging.getLogger(__name__)
 
 
-def load_to_staging_table(temp_file: str, table_name: str, conn, ds: str):
+def load_stg_table(temp_file: str, table_name: str, conn, ds: str):
     """Load data from parquet file to staging table"""
     logger.info(f"Loading data from {temp_file} to {table_name}")
 
@@ -36,26 +36,26 @@ def cleanup_temp_file(temp_file: str):
         logger.info(f"Cleaned up temp file: {temp_file}")
 
 
-def load_fact_table(staging_table: str, fact_table: str, conn, ds: str):
-    """Load aggregated data from staging to fact table"""
-    logger.info(f"Loading data from {staging_table} to {fact_table} for date: {ds}")
+def load_agg_table(staging_table: str, agg_table: str, conn, ds: str):
+    """Load aggregated data from staging to agg table"""
+    logger.info(f"Loading data from {staging_table} to {agg_table} for date: {ds}")
 
     # Delete existing data for idempotency
-    logger.info(f"Deleting existing fact data for date: {ds}")
+    logger.info(f"Deleting existing agg data for date: {ds}")
     delete_result = conn.execute(
         text(f"""
-            DELETE FROM {fact_table}
+            DELETE FROM {agg_table}
             WHERE appointment_date = :date
         """),
         {"date": ds},
     )
-    logger.info(f"Deleted {delete_result.rowcount} existing fact records")
+    logger.info(f"Deleted {delete_result.rowcount} existing agg records")
 
     # Insert aggregated data
     logger.info("Inserting aggregated appointment data...")
     insert_result = conn.execute(
         text(f"""
-            INSERT INTO {fact_table} (clinic_id, appointment_date, appointments_count)
+            INSERT INTO {agg_table} (clinic_id, appointment_date, appointments_count)
             SELECT
                 clinic_id,
                 DATE(created_at) as appointment_date,
@@ -67,5 +67,5 @@ def load_fact_table(staging_table: str, fact_table: str, conn, ds: str):
         {"date": ds},
     )
 
-    logger.info(f"Inserted {insert_result.rowcount} records to {fact_table}")
+    logger.info(f"Inserted {insert_result.rowcount} records to {agg_table}")
     return insert_result.rowcount

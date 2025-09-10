@@ -53,29 +53,23 @@ docker-compose --profile test run --rm test
 ```
 
 ---
+## Pipeline Flow
+```
+CSV → Validate → Clean → Stage → Quality Checks → Agg Table
+```
 
-## Pipeline workflow
-1. **File discovery** - `extract_source_file`,
-pulling CSV file witch matching pattern 'appointments_YYYY_MM_DD.csv', for yesterdays date
-2. **File validation** - `validate_source_file`,
-checking if csv file is corrupted, missing rows, empty
-3. **Data cleaning** - `clean_source_data`,
-    - normalize clinic ids (lowercase, trimmed)
-    - convert timestamp to datetime format
-    - remove invalid/null record
-    - filter to exptected columns only
-4. **Staging load** - `load_data_to_staging`,
-loading cleaned data to `stg_daily_appointments` table
-5. **Data quality checks** - `staging_dq_checks`,
-    - row count
-    - null values
-    - duplicate appointment ID
-6. **Load to fact** - `load_fact_table_from_staging`, 
-aggregate data by clinic and date, load to final table `fct_daily_appointments`
-7. **Reconciliation DQ check** - `reconciliation_check`,
-dq on final table, comparing sum of appointments from fact with sum of rows from staging. 
+## Steps
+
+1. **File Discovery** - (`extract_source_file`), Find `appointments_YYYY_MM_DD.csv` for yesterday's date
+2. **File Validation** - (`validate_source_file`), Check file integrity, required columns, non-empty data
+3. **Data Cleaning** - (`clean_source_data`), Normalize clinic IDs, parse timestamps, remove nulls/invalids
+4. **Staging Load** - (`load_stg_daily_appointments`), Load cleaned data to `stg_daily_appointments` table
+5. **Staging DQ** -  (`dq_checks_staging`), Validate row counts, nulls, duplicates
+6. **Agg Load** - (`load_agg_daily_appointments`), Aggregate by clinic/date, load to `agg_daily_appointments`
+7. **Agg DQ** - (`dq_check_comparison`), Verify staging totals count agains agg table sums
 
 **Tables schemas**
+- Tables are created when docker-compose is ran
 ```
     CREATE TABLE IF NOT EXISTS stg_daily_appointments (
         appointment_id BIGINT,
@@ -85,7 +79,7 @@ dq on final table, comparing sum of appointments from fact with sum of rows from
     );
 ```
 ```
-    CREATE TABLE IF NOT EXISTS fct_daily_appointments (
+    CREATE TABLE IF NOT EXISTS agg_daily_appointments (
         clinic_id VARCHAR(255) NOT NULL,
         appointment_date DATE NOT NULL,
         appointments_count INTEGER,
@@ -132,10 +126,10 @@ dq on final table, comparing sum of appointments from fact with sum of rows from
 ---
 
 ### 4. Reconciliation Check Failures
-**Problem:** DQ check **check_reconciliation** failed  
+**Problem:** DQ check **dq_check_comparison** failed  
 - **Cause:** Fact table counts don't match staging table  
 - **Solutions:**  
-  - Check aggregation logic in `load_fact_table` function  
+  - Check aggregation logic in `load_agg_table` function  
   - Verify date filtering is consistent between queries  
   - Look for timezone conversion issues  
 
@@ -146,7 +140,7 @@ dq on final table, comparing sum of appointments from fact with sum of rows from
 SELECT 
     clinic_id,
     AVG(appointments_count) as avg_appointments_per_day
-FROM fct_daily_appointments
+FROM agg_daily_appointments
 GROUP BY clinic_id
 ORDER BY avg_appointments_per_day DESC
 LIMIT 1;
@@ -158,7 +152,7 @@ LIMIT 1;
 SELECT 
     TO_CHAR(appointment_date, 'Day') as day_name,
     SUM(appointments_count) as app_count
-FROM fct_daily_appointments
+FROM agg_daily_appointments
 GROUP BY day_name
 ORDER BY app_count desc
 LIMIT 1
