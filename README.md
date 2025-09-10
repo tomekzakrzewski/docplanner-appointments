@@ -1,0 +1,21 @@
+How to run
+1. Clone the repository 'git clone https://github.com/tomekzakrzewski/docplanner-appointments.git'
+# Clinic Appointments Data Pipeline
+
+## Quick Start
+
+1. **Clone the repository:**
+   git clone https://github.com/tomekzakrzewski/docplanner-appointments.git
+   cd docplanner-appointments
+2. **Set-up environment** 
+    cp .env.example .env
+3. **Build and start services:**
+    Make sure you have docker running   
+    docker-compose build
+    docker-compose up -d
+4. **Access Airflow UI:**
+    URL: http://localhost:8080
+    Username: admin
+    Password: admin
+5. **Run tests*
+    docker-compose --profile test run --rm test

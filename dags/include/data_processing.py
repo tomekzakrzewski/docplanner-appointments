@@ -32,7 +32,9 @@ def clean_appointment_data(filepath: str, expected_columns: list):
     # Clean data
     df["clinic_id"] = df["clinic_id"].str.lower().str.strip()
     df["created_at"] = pd.to_datetime(df["created_at"], format="mixed", errors="coerce")
-    df.dropna(subset=["appointment_id", "clinic_id"], inplace=True)
+    df.dropna(subset=["appointment_id", "clinic_id", "created_at"], inplace=True)
+    df = df[df["clinic_id"].str.len() > 0]
+
     df = df[expected_columns]
 
     logger.info(f"Cleaned data: {len(df)} rows remaining")
