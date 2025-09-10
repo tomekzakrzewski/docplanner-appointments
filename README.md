@@ -1,23 +1,43 @@
 # Clinic Appointments Data Pipeline
 
 ## Quick Start
+### 1. Clone the repository
+```bash
+git clone https://github.com/tomekzakrzewski/docplanner-appointments.git
+cd docplanner-appointments
+```
 
-1. **Clone the repository:**
-- git clone https://github.com/tomekzakrzewski/docplanner-appointments.git
-- cd docplanner-appointments
-2. **Set-up environment** 
-- cp .env.example .env
-3. **Build and start services:**
-- Make sure you have docker running   
-- docker-compose build
-- docker-compose up -d
-4. **Access Airflow UI:**
-- URL: http://localhost:8080
-- Username: airflow
-- Password: airflow
-5. **Run tests**
-- docker-compose --profile test run --rm test
+---
 
+### 2. Set up environment
+```bash
+cp .env.example .env
+```
+
+---
+
+### 3. Build and start services
+Make sure you have **Docker** running:
+```bash
+docker-compose build
+docker-compose up -d
+```
+
+---
+
+### 4. Access Airflow UI
+- URL: [http://localhost:8080](http://localhost:8080)  
+- Username: `airflow`  
+- Password: `airflow`  
+
+---
+
+### 5. Run tests
+```bash
+docker-compose --profile test run --rm test
+```
+
+---
 
 ## Pipeline workflow
 1. **File discovery** - 'extract_source_file', pulling CSV file witch matching pattern 'appointments_YYYY_MM_DD.csv', for yesterdays date
@@ -32,7 +52,8 @@
     - row count
     - null values
     - duplicate appointment ID
-6. **Load to fact** - 'load_fact_table_from_staging', aggregate data by clinic and date, load to final table fct_daily_appointments
+6. **Load to fact** - 'load_fact_table_from_staging', 
+aggregate data by clinic and date, load to final table fct_daily_appointments
 7. **Reconciliation DQ check** - dq on final table, comparing sum of appointments from fact with sum of rows from staging. If passes, means aggregation was successfull.
 
 **Tables schemas**
