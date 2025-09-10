@@ -25,7 +25,7 @@ logger = logging.getLogger("airflow.task")
 # DAG Configuration
 DB_CONN_ID = "postgres_default"
 DATA_PATH = "/opt/airflow/data"
-FACT_TABLE = "fct_daily_appointments"
+FCT_TABLE = "fct_daily_appointments"
 STG_TABLE = "stg_daily_appointments"
 EXPECTED_COLUMNS = ["appointment_id", "clinic_id", "patient_id", "created_at"]
 
@@ -155,7 +155,7 @@ def daily_clinic_appointment_dag():
         try:
             with get_db_connection(DB_CONN_ID) as conn:
                 with conn.begin():
-                    row_count = load_fact_table(STG_TABLE, FACT_TABLE, conn, ds)
+                    row_count = load_fact_table(STG_TABLE, FCT_TABLE, conn, ds)
 
             logger.info(f"Fact table load completed successfully: {row_count} records")
 
@@ -173,7 +173,7 @@ def daily_clinic_appointment_dag():
             SELECT ABS(
                 COALESCE((
                     SELECT SUM(appointments_count) 
-                    FROM {{ params.fact_table }}
+                    FROM {{ params.fct_table }}
                     WHERE appointment_date = '{{ ds }}'
                 ), 0) -
                 COALESCE((
@@ -184,7 +184,7 @@ def daily_clinic_appointment_dag():
             ) AS difference
         """,
         pass_value=0,
-        params={"fact_table": FACT_TABLE, "stg_table": STG_TABLE},
+        params={"fct_table": FCT_TABLE, "stg_table": STG_TABLE},
     )
 
     end_pipeline = EmptyOperator(task_id="end")
