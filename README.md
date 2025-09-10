@@ -3,20 +3,20 @@
 ## Quick Start
 
 1. **Clone the repository:**
-   git clone https://github.com/tomekzakrzewski/docplanner-appointments.git
-   cd docplanner-appointments
+- git clone https://github.com/tomekzakrzewski/docplanner-appointments.git
+- cd docplanner-appointments
 2. **Set-up environment** 
-    cp .env.example .env
+- cp .env.example .env
 3. **Build and start services:**
-    Make sure you have docker running   
-    docker-compose build
-    docker-compose up -d
+- Make sure you have docker running   
+- docker-compose build
+- docker-compose up -d
 4. **Access Airflow UI:**
-    URL: http://localhost:8080
-    Username: airflow
-    Password: airflow
-5. **Run tests*
-    docker-compose --profile test run --rm test
+- URL: http://localhost:8080
+- Username: airflow
+- Password: airflow
+5. **Run tests**
+- docker-compose --profile test run --rm test
 
 
 ## Pipeline workflow
@@ -53,27 +53,48 @@
     );
 ```
 
+## Potential failures & solutions
+1. File Discovery Issues
 
-## Quick Start
+  Problem: FileNotFoundError: File: appointments_YYYY_MM_DD.csv not found
+    - Cause: Missing source file for the scheduled date
+    - Solutions:
+        - Verify file naming follows exact pattern appointments_YYYY_MM_DD.csv
+        - Check file exists in /opt/airflow/data/ directory
+        - Ensure file permissions allow read access
+        - For backfill runs, verify historical files are available
+    
+2. Schema Validation Failures
 
-1. **Clone the repository:**
-   git clone https://github.com/tomekzakrzewski/docplanner-appointments.git
-   cd docplanner-appointments
-2. **Set-up environment** 
-    cp .env.example .env
-3. **Build and start services:**
-    Make sure you have docker running   
-    docker-compose build
-    docker-compose up -d
-4. **Access Airflow UI:**
-    URL: http://localhost:8080
-    Username: airflow
-    Password: airflow
-5. **Run tests*
-    docker-compose --profile test run --rm test
+  Problem: ValueError: Missing required columns
+    - Cause: CSV file missing expected columns: appointment_id, clinic_id, patient_id, created_at
+    - Solutions:
+        - Verify CSV header matches expected schema exactly
+        - Check for typos in column names
+        - Ensure CSV is not corrupted or truncated
 
+3. Data Quality Check Failures
 
+  Problem: DQ check 'row_count_check' failed
+    - Cause: Mismatch between expected and actual row counts after cleaning
+    - Solutions:
+        - Review data cleaning logic in clean_appointment_data
+        - Check for excessive null/invalid records being filtered out
+        - Verify timestamp parsing is working correctly
 
+  Problem: Found duplicate appointment_ids
+    - Cause: Same appointment appears multiple times
+    - Solutions:
+        - Check source system for duplicate generation
+
+  4. Reconciliation Check Failures
+
+  Problem: DQ check 'check_reconciliation' failed
+    - Cause: Fact table counts don't match staging table
+    - Solutions:
+        - Check aggregation logic in load_fact_table function
+        - Verify date filtering is consistent between queries
+        - Look for timezone conversion issues
 
 ## SQL queries
 **highest average number of appointments per day**
