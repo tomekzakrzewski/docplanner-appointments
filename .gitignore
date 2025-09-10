@@ -25,10 +25,7 @@ __pycache__/
 /nosetests.xml
 /coverage.xml
 .env
-.env.*
-!*.env.example
 .vscode/*
 !.vscode/settings.json
 !.vscode/launch.json
 .DS_Store
-/data

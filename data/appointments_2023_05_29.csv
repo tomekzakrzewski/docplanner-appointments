@@ -1,0 +1,6 @@
+appointment_id,clinic_id,patient_id,created_at
+2949,clinic_a,688,2023/05/29 00:00:00
+1917,clinic_c,293,2023-05-29T00:00:00
+4041,clinic_b,986,2023-05-29 00:00
+9508,clinic_c,734,2023/05/29 00:00:00
+7917,clinic_a,458,2023-05-29T00:00:00

@@ -1,0 +1,7 @@
+appointment_id,clinic_id,patient_id,created_at
+7241,clinic_b,897,2023-05-13T00:00:00
+2331,clinic_a,265,2023-05-13 00:00
+5637,clinic_c,205,2023-05-13 00:00
+8043,clinic_b,283,2023-05-13 00:00
+6971,clinic_d,168,2023-05-13T00:00:00
+5300,clinic_b,846,2023-05-13T00:00:00
