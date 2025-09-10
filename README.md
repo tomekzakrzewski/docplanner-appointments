@@ -55,21 +55,25 @@ docker-compose --profile test run --rm test
 ---
 
 ## Pipeline workflow
-1. **File discovery** - 'extract_source_file', pulling CSV file witch matching pattern 'appointments_YYYY_MM_DD.csv', for yesterdays date
-2. **File validation** - 'validate_source_file', checking if csv file is corrupted, missing rows, empty
-3. **Data cleaning** - 'clean_source_data',
+1. **File discovery** - `extract_source_file`,
+pulling CSV file witch matching pattern 'appointments_YYYY_MM_DD.csv', for yesterdays date
+2. **File validation** - `validate_source_file`,
+checking if csv file is corrupted, missing rows, empty
+3. **Data cleaning** - `clean_source_data`,
     - normalize clinic ids (lowercase, trimmed)
     - convert timestamp to datetime format
     - remove invalid/null record
     - filter to exptected columns only
-4. **Staging load** - 'load_data_to_staging', loading cleaned data to 'stg_daily_appointments' table
-5. **Data quality checks** - 'staging_dq_checks',
+4. **Staging load** - `load_data_to_staging`,
+loading cleaned data to `stg_daily_appointments` table
+5. **Data quality checks** - `staging_dq_checks`,
     - row count
     - null values
     - duplicate appointment ID
-6. **Load to fact** - 'load_fact_table_from_staging', 
+6. **Load to fact** - `load_fact_table_from_staging`, 
 aggregate data by clinic and date, load to final table fct_daily_appointments
-7. **Reconciliation DQ check** - dq on final table, comparing sum of appointments from fact with sum of rows from staging. If passes, means aggregation was successfull.
+7. **Reconciliation DQ check** - `reconciliation_check`,
+dq on final table, comparing sum of appointments from fact with sum of rows from staging. If passes, means aggregation was successfull.
 
 **Tables schemas**
 ```
