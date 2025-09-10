@@ -30,3 +30,4 @@ GROUP BY clinic_id
 ORDER BY avg_appointments_per_day DESC
 LIMIT 1;
 ```
+![query-1 text]jreadme-utils/query-1.png)
