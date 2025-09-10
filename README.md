@@ -17,3 +17,14 @@
     Password: airflow
 5. **Run tests*
     docker-compose --profile test run --rm test
+
+
+## SQL queries
+**highest average number of appointments per day**
+`SELECT 
+    clinic_id,
+    AVG(appointments_count) as avg_appointments_per_day
+FROM fct_daily_appointments
+GROUP BY clinic_id
+ORDER BY avg_appointments_per_day DESC
+LIMIT 1;`
