@@ -19,10 +19,8 @@ from include.validators import validate_csv_file
 from include.database import load_stg_table, cleanup_temp_file, load_agg_table
 from include.data_quality import get_dq_checks, run_dq_checks
 
-## Logger
 logger = logging.getLogger("airflow.task")
 
-# DAG Configuration
 DB_CONN_ID = "postgres_default"
 DATA_PATH = "/opt/airflow/data"
 AGG_TABLE = "agg_daily_appointments"

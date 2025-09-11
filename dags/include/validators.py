@@ -5,7 +5,7 @@ logger = logging.getLogger(__name__)
 
 
 def validate_csv_file(filepath: str, expected_columns: list):
-    """Validate CSV file structure and return DataFrame with warnings"""
+    """Validate CSV file structure"""
     logger.info(f"Validating CSV file: {filepath}")
 
     df = pd.read_csv(filepath)

@@ -1,4 +1,3 @@
-# src/data_quality.py
 import logging
 from sqlalchemy import text
 
@@ -6,7 +5,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_dq_checks(table_name: str, expected_row_count: int):
-    """Define data quality checks for staging table"""
+    """Data quality checks for staging table"""
     return [
         {
             "name": "row_count_check",
