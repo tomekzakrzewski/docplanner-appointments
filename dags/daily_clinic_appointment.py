@@ -1,13 +1,14 @@
 import pendulum
-import pandas as pd
 import logging
 from datetime import datetime, timedelta
 from contextlib import contextmanager
-from sqlalchemy import text
 
 from airflow.decorators import dag, task
 from airflow.providers.postgres.hooks.postgres import PostgresHook
-from airflow.providers.common.sql.operators.sql import SQLValueCheckOperator
+from airflow.providers.common.sql.operators.sql import (
+    SQLValueCheckOperator,
+    SQLTableCheckOperator,
+)
 from airflow.exceptions import AirflowFailException
 from airflow.operators.empty import EmptyOperator
 from include.data_processing import (
@@ -17,7 +18,6 @@ from include.data_processing import (
 )
 from include.validators import validate_csv_file
 from include.database import load_stg_table, cleanup_temp_file, load_agg_table
-from include.data_quality import get_dq_checks, run_dq_checks
 
 logger = logging.getLogger("airflow.task")
 
@@ -129,28 +129,38 @@ def daily_clinic_appointment_dag():
         finally:
             cleanup_temp_file(temp_file)
 
-    @task
-    def dq_checks_staging(row_count: int, ds: str):
-        # Assume zero tolerance for DQs, task fails
-        """Run data quality checks on staging table"""
-        logger.info(f"Starting DQ checks for date: {ds}")
-
-        try:
-            checks = get_dq_checks(STG_TABLE, row_count)
-
-            with get_db_connection(DB_CONN_ID) as conn:
-                failed_checks = run_dq_checks(checks, conn, ds)
-
-            if failed_checks:
-                error_msg = f"DQ failures for {ds}:\n" + "\n".join(failed_checks)
-                logger.error(error_msg)
-                raise AirflowFailException(error_msg)
-
-            logger.info(f"All DQ checks passed for date: {ds}")
-
-        except Exception as e:
-            logger.error(f"DQ check execution failed: {e}")
-            raise AirflowFailException(f"DQ check failed: {e}")
+    dq_staging = SQLTableCheckOperator(  # Queries could be moved to different file
+        task_id="dq_checks_staging",
+        conn_id=DB_CONN_ID,
+        table=STG_TABLE,
+        checks={
+            "row_count_check": {
+                "check_statement": f"""
+                    (SELECT COUNT(*)
+                    FROM {STG_TABLE} 
+                    WHERE created_at = '{{{{ ds }}}}') = {{{{ ti.xcom_pull(task_ids='load_stg_daily_appointments') }}}}
+                """.strip(),
+            },
+            "null_check": {
+                "check_statement": f"""
+                    (SELECT COUNT(*) 
+                    FROM {STG_TABLE} 
+                    WHERE created_at = '{{{{ ds }}}}' 
+                        AND (appointment_id IS NULL OR clinic_id IS NULL)) = 0
+                """.strip(),
+            },
+            "duplicate_check": {
+                "check_statement": f"""
+                    NOT EXISTS (
+                        SELECT 1 
+                        FROM {STG_TABLE} 
+                        WHERE created_at = '{{{{ ds }}}}' 
+                        GROUP BY appointment_id 
+                        HAVING COUNT(*) > 1)
+                """.strip(),
+            },
+        },
+    )
 
     @task
     def load_agg_daily_appointments(ds: str):
@@ -198,7 +208,7 @@ def daily_clinic_appointment_dag():
     validated_file = validate_source_file(source_file)
     cleaned_data = clean_source_data(validated_file)
     staged_data = load_stg_daily_appointments(cleaned_data)
-    dq_results = dq_checks_staging(staged_data)
+    # dq_results = dq_checks_staging(staged_data)
     agg_load = load_agg_daily_appointments()
 
     (
@@ -206,7 +216,8 @@ def daily_clinic_appointment_dag():
         >> validated_file
         >> cleaned_data
         >> staged_data
-        >> dq_results
+        # >> dq_results
+        >> dq_staging
         >> agg_load
         >> dq_check_comparison
         >> end_pipeline

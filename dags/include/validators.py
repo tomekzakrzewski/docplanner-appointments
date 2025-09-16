@@ -8,8 +8,13 @@ def validate_csv_file(filepath: str, expected_columns: list):
     """Validate CSV file structure"""
     logger.info(f"Validating CSV file: {filepath}")
 
-    df = pd.read_csv(filepath)
-    logger.info(f"Read CSV with {len(df)} rows")
+    try:
+        df = pd.read_csv(filepath)
+        logger.info(f"Read CSV with {len(df)} rows")
+    except pd.errors.ParserError as e:
+        raise ValueError(
+            f"CSV parsing failed - file may be corrupted: {filepath}. Error: {str(e)}"
+        )
 
     if df.empty:
         raise ValueError("CSV file is empty")
@@ -23,4 +28,4 @@ def validate_csv_file(filepath: str, expected_columns: list):
         logger.warning(f"Extra columns found: {extra_columns}")
 
     logger.info("CSV validation passed")
-    return df
+    return
