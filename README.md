@@ -73,7 +73,7 @@ CSV -> Validate -> Clean -> Stage -> Quality Checks -> Agg Table -> Comparison D
 2. **File Validation** - (`validate_source_file`), Check file integrity, required columns, non-empty data
 3. **Data Cleaning** - (`clean_source_data`), Normalize clinic IDs, parse timestamps, remove nulls/invalids
 4. **Staging Load** - (`load_stg_daily_appointments`), Load cleaned data to `stg_daily_appointments` table
-5. **Staging DQ** -  (`dq_checks_staging`), Validate row counts, nulls, duplicates
+5. **Staging DQ** -  (`staging_dq_group`), Row count, nulls, duplicates
 6. **Agg Load** - (`load_agg_daily_appointments`), Aggregate by clinic/date, load to `agg_daily_appointments`
 7. **Agg DQ** - (`dq_check_comparison`), Verify staging totals count agains agg table sums
 
