@@ -12,12 +12,12 @@ from airflow.providers.common.sql.operators.sql import (
 from airflow.exceptions import AirflowFailException
 from airflow.operators.empty import EmptyOperator
 from airflow.utils.task_group import TaskGroup
-from include.data_processing import (
+from include.data_utils import (
     clean_appointment_data,
     save_cleaned_data,
 )
-from dags.include.file_utils import validate_csv_file, find_source_file
-from include.database import load_stg_table, cleanup_temp_file
+from include.file_utils import validate_csv_file, find_source_file
+from include.db_utils import load_stg_table, cleanup_temp_file
 from include.sql.queries import DB_QUERIES, STAGING_DQ_CHECKS, AGG_DQ_CHECKS
 
 logger = logging.getLogger("airflow.task")
