@@ -5,7 +5,7 @@ import sys
 
 sys.path.insert(0, "/opt/airflow/dags")
 
-from dags.include.data_processing import clean_appointment_data
+from dags.include.data_utils import clean_appointment_data
 
 
 def test_clean_appointment_data():

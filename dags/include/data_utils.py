@@ -1,25 +1,7 @@
 import pandas as pd
-import os
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-def find_source_file(data_path: str, date_str: str) -> str:
-    """Find and return path to source file for given date"""
-    logger.info(f"Looking for appointments file for date: {date_str}")
-
-    filename = f"appointments_{date_str}.csv"
-    filepath = os.path.join(data_path, filename)
-
-    logger.info(f"Checking file path: {filepath}")
-
-    if not os.path.exists(filepath):
-        logger.error(f"File not found: {filepath}")
-        raise FileNotFoundError(f"File: {filename} not found under path: {filepath}")
-
-    logger.info(f"Found file: {filepath}")
-    return filepath
 
 
 def clean_appointment_data(filepath: str, expected_columns: list):
@@ -41,7 +23,7 @@ def clean_appointment_data(filepath: str, expected_columns: list):
     return df
 
 
-def save_cleaned_data(df: pd.DataFrame, output_path: str, ds: str):
+def save_cleaned_data(df, output_path: str, ds: str):
     """Save cleaned DataFrame to parquet file"""
     temp_file = f"{output_path}/temp_validated_{ds}.parquet"
     df.to_parquet(temp_file)
