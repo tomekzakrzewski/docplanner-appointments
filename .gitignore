@@ -30,3 +30,4 @@ __pycache__/
 !.vscode/settings.json
 !.vscode/launch.json
 .DS_Store
+/.ruff_cache

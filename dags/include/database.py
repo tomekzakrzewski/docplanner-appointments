@@ -34,38 +34,3 @@ def cleanup_temp_file(temp_file: str):
     if os.path.exists(temp_file):
         os.remove(temp_file)
         logger.info(f"Cleaned up temp file: {temp_file}")
-
-
-def load_agg_table(staging_table: str, agg_table: str, conn, ds: str):
-    """Load aggregated data from staging to agg table"""
-    logger.info(f"Loading data from {staging_table} to {agg_table} for date: {ds}")
-
-    # Delete existing data for idempotency
-    logger.info(f"Deleting existing agg data for date: {ds}")
-    delete_result = conn.execute(
-        text(f"""
-            DELETE FROM {agg_table}
-            WHERE appointment_date = :date
-        """),
-        {"date": ds},
-    )
-    logger.info(f"Deleted {delete_result.rowcount} existing agg records")
-
-    # Insert aggregated data
-    logger.info("Inserting aggregated appointment data...")
-    insert_result = conn.execute(
-        text(f"""
-            INSERT INTO {agg_table} (clinic_id, appointment_date, appointments_count)
-            SELECT
-                clinic_id,
-                DATE(created_at) as appointment_date,
-                COUNT(*) as appointments_count
-            FROM {staging_table}
-            WHERE DATE(created_at) = :date
-            GROUP BY clinic_id, DATE(created_at)
-        """),
-        {"date": ds},
-    )
-
-    logger.info(f"Inserted {insert_result.rowcount} records to {agg_table}")
-    return insert_result.rowcount
